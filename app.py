@@ -4,10 +4,14 @@ import zipfile
 from urllib.parse import urlsplit, urlunsplit
 
 from flask import Flask, request, redirect, jsonify, send_from_directory
+from flask_compress import Compress
+
 from stravalib.client import Client
 
 
 app = Flask(__name__)
+Compress(app)
+
 strava_client = Client()
 
 @app.route('/')
