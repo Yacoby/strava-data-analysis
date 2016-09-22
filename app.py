@@ -1,5 +1,6 @@
 import json
 import os
+import zipfile
 from urllib.parse import urlsplit, urlunsplit
 
 from flask import Flask, request, redirect, jsonify
@@ -47,27 +48,26 @@ def cache():
         return (jsonify(False), 401)
 
     types = ['time', 'latlng', 'altitude',]
+    with zipfile.ZipFile('strava_data.zip', 'w') as data_file:
+        activity_ids = [a.id for a in strava_client.get_activities()]
+        data_file.writestr('activities.json', json.dumps(activity_ids), zipfile.ZIP_LZMA)
 
-    activity_ids = [a.id for a in strava_client.get_activities()]
-    with open(os.path.join('cached_activities', 'activities.json'), 'w') as fh:
-        json.dump(activity_ids, fh)
-
-    for activity_id in activity_ids:
-        streams = strava_client.get_activity_streams(activity_id, types=types, resolution='high')
-        streams = {k: list(v.data) for k, v in streams.items()}
-        with open(os.path.join('cached_activities', str(activity_id) + '.json'), 'w') as fh:
-            json.dump(streams, fh)
+        for activity_id in activity_ids:
+            streams = strava_client.get_activity_streams(activity_id, types=types, resolution='high')
+            streams = {k: list(v.data) for k, v in streams.items()}
+            data_file.writestr(str(activity_id), json.dumps(streams), zipfile.ZIP_LZMA)
     return jsonify(True)
 
 @app.route('/activities')
 def activities():
-    with open(os.path.join('cached_activities', 'activities.json'), 'r') as fh:
-        ids = json.load(fh)
+    with zipfile.ZipFile('strava_data.zip') as data_file:
+        with data_file.open('activities.json') as fh:
+            ids = json.loads(fh.read().decode('ascii'))
 
-    activity_data = {}
-    for act_id in ids:
-        with open(os.path.join('cached_activities', str(act_id) + '.json'), 'r') as fh:
-            activity_data[act_id] = json.load(fh)
+        activity_data = {}
+        for act_id in ids:
+            with data_file.open(str(act_id)) as fh:
+                activity_data[act_id] = json.loads(fh.read().decode('ascii'))
     return jsonify(activity_data)
 
 
