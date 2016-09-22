@@ -3,7 +3,7 @@ import os
 import zipfile
 from urllib.parse import urlsplit, urlunsplit
 
-from flask import Flask, request, redirect, jsonify
+from flask import Flask, request, redirect, jsonify, send_from_directory
 from stravalib.client import Client
 
 
@@ -13,6 +13,10 @@ strava_client = Client()
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
+
+@app.route('/maps/<path:filename>')
+def serve_static(filename):
+    return send_from_directory("static/", filename)
 
 @app.route('/auth')
 def auth():
