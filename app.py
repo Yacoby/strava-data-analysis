@@ -6,19 +6,20 @@ from urllib.parse import urlsplit, urlunsplit
 from flask import Flask, request, redirect, jsonify
 from stravalib.client import Client
 
-import config
 
 app = Flask(__name__)
 strava_client = Client()
 
 @app.route('/')
 def index():
-    if not strava_client.access_token:
-        return redirect('/auth')
     return app.send_static_file('index.html')
 
 @app.route('/auth')
 def auth():
+    try:
+        import config
+    except ImportError:
+        return (jsonify({'error': 'Not setup for auth'}), 500)
     state = request.args.get('state')
     [s, nl, path, q, frag] = urlsplit(request.url)
     redir_url = urlunsplit([s, nl, 'code_grant', '', ''])
@@ -29,6 +30,10 @@ def auth():
 
 @app.route('/code_grant')
 def code_grant():
+    try:
+        import config
+    except ImportError:
+        return (jsonify({'error': 'Not setup for auth'}), 500)
     code = request.args.get('code')
     state = request.args.get('state')
     access_token = strava_client.exchange_code_for_token(client_id=config.STRAVA_CLIENT_ID,
