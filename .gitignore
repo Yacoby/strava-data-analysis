@@ -1,3 +1,6 @@
+# Avoid committing config files as they contain secrets
+config.py
+
 # Vim stuff
 *.swp
 *.un~
