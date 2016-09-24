@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+        <meta charset="utf-8">
+        <title>Basic</title>
+        <style>
+            html, body {
+                height: 100%;
+                padding: 0;
+
+                display: flex;
+                flex-direction: column;
+            }
+            #map {
+                flex-grow: 1;
+            }
+        </style>
+
+        <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBC5VIIby0Crl2cuh659mjGlM3ajbKvaUM"></script>
+        <script src="https://code.jquery.com/jquery-3.1.0.min.js" ></script>
+    </head>
+    <body>
+        Every ride of some interest (i.e. not commutes) in about 2 years. NB. Takes a while (10s - 20s) to load.
+        <div id="map"></div>
+        <script>
+            function initMap() {
+                var map = new google.maps.Map(document.getElementById('map'), {
+                    zoom: 3,
+                    center: {lat: 0, lng: -180},
+                    mapTypeId: 'terrain'
+                });
+                google.maps.event.addListener(map, 'click', function(event) {
+                  console.log(event.latLng.lat() + ', '+ event.latLng.lng());
+                });
+
+                $.get('/lift_polys').done(function(lifts) {
+                    Object.keys(lifts).forEach(function (key) {
+                        var coords = lifts[key].map(function(ll) {
+                            return {lat: ll[0], lng: ll[1]};
+                        });
+                        var lift = new google.maps.Polygon({
+                            paths: coords,
+                            strokeColor: '#2B60DE',
+                            strokeOpacity: 0.5,
+                            strokeWeight: 2,
+                            fillColor: '#2B60DE',
+                            fillOpacity: 0.2
+                        });
+                        lift.setMap(map);
+                    });
+                });
+
+                $.get('/activities').done(function(activities) {
+                    Object.keys(activities).forEach(function (key) {
+                        var value = activities[key];
+                        var llPath = value['latlng'].map(function(ll) {
+                            return {lat: ll[0], lng: ll[1]};
+                        });
+                        var path = new google.maps.Polyline({
+                            path: llPath,
+                            geodesic: true,
+                            strokeColor: '#FF0000',
+                            strokeOpacity: 1.0,
+                            strokeWeight: 2
+                        });
+                        path.setMap(map);
+                    });
+                });
+            }
+            google.maps.event.addDomListener(window, 'load', initMap);
+        </script>
+    </body>
+</html>

@@ -1,3 +1,6 @@
+from geographiclib.geodesic import Geodesic
+import math
+import shapely.geometry
 import json
 import os
 import zipfile
@@ -8,6 +11,7 @@ from flask_compress import Compress
 
 from stravalib.client import Client
 
+import lifts
 
 app = Flask(__name__)
 Compress(app)
@@ -83,6 +87,21 @@ def activities():
                 activity_data[act_id] = json.loads(fh.read().decode('ascii'))
     return jsonify(activity_data)
 
+@app.route('/lift_polys')
+def lift_polys():
+    return jsonify({k:lift_line_to_poly(v) for k, v in lifts.LIFTS.items()})
+
+def lift_line_to_poly(pts):
+    # distance away from first point to lat long
+    azi1 = Geodesic.WGS84.Inverse(pts[0][0], pts[0][1], pts[-1][0], pts[-1][1])['azi1']
+    azi1 = (azi1 + 90) % 360
+    point = Geodesic.WGS84.Direct(pts[0][0], pts[0][1], azi1, 20)
+
+    # distance
+    dist = math.sqrt((point['lat1']-point['lat2'])**2 + (point['lon1']-point['lon2'])**2)
+
+    ls = shapely.geometry.LineString(pts)
+    return list(ls.buffer(dist).exterior.coords)
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT',5000))
