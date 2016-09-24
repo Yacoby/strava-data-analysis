@@ -3,7 +3,7 @@
     <head>
         <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
         <meta charset="utf-8">
-        <title>Basic</title>
+        <title>Lifts</title>
         <style>
             html, body {
                 height: 100%;
@@ -18,16 +18,17 @@
         </style>
 
         <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBC5VIIby0Crl2cuh659mjGlM3ajbKvaUM"></script>
-        <script src="https://code.jquery.com/jquery-3.1.0.min.js" ></script>
+        <script src="https://code.jquery.com/jquery-3.1.0.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/lodash/4.16.1/lodash.min.js"></script>
     </head>
     <body>
-        Every ride of some interest (i.e. not commutes) in about 2 years. NB. Takes a while (10s - 20s) to load.
+        Lift information
         <div id="map"></div>
         <script>
             function initMap() {
                 var map = new google.maps.Map(document.getElementById('map'), {
-                    zoom: 3,
-                    center: {lat: 0, lng: -180},
+                    zoom: 8,
+                    center: {lat: 45.8, lng: 6.6},
                     mapTypeId: 'terrain'
                 });
                 google.maps.event.addListener(map, 'click', function(event) {
@@ -51,20 +52,35 @@
                     });
                 });
 
-                $.get('/activities').done(function(activities) {
+                function renderPath(path, color) {
+                    var poly = new google.maps.Polyline({
+                        path: path,
+                        geodesic: true,
+                        strokeColor: color,
+                        strokeOpacity: 1.0,
+                        strokeWeight: 2
+                    });
+                    poly.setMap(map);
+                }
+
+                $.get('/lift_activities').done(function(activities) {
                     Object.keys(activities).forEach(function (key) {
                         var value = activities[key];
-                        var llPath = value['latlng'].map(function(ll) {
+                        value['latlng'] = value['latlng'].map(function(ll) {
                             return {lat: ll[0], lng: ll[1]};
                         });
-                        var path = new google.maps.Polyline({
-                            path: llPath,
-                            geodesic: true,
-                            strokeColor: '#FF0000',
-                            strokeOpacity: 1.0,
-                            strokeWeight: 2
-                        });
-                        path.setMap(map);
+
+                        var currentPath = [];
+                        var wasOnLift = _.head(value['on_lift']);
+                        for ([ll, onLift] of _.zip(value['latlng'], value['on_lift'])){
+                            currentPath.push(ll)
+                            if (onLift != wasOnLift) {
+                                renderPath(currentPath, wasOnLift ? '#008000' : '#FF0000')
+                                currentPath = [ll];
+                                wasOnLift = onLift
+                            }
+                        }
+                        renderPath(currentPath, wasOnLift ? '#008000' : '#FF0000')
                     });
                 });
             }

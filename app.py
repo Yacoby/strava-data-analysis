@@ -5,6 +5,7 @@ import json
 import os
 import zipfile
 from urllib.parse import urlsplit, urlunsplit
+from itertools import zip_longest
 
 from flask import Flask, request, redirect, jsonify, send_from_directory
 from flask_compress import Compress
@@ -58,6 +59,11 @@ def code_grant():
 
 @app.route('/cache')
 def cache():
+    try:
+        import config
+    except ImportError:
+        return (jsonify({'error': 'Not setup for auth'}), 500)
+
     if not strava_client.access_token:
         return redirect('/auth?state=/cache')
 
@@ -70,9 +76,32 @@ def cache():
         data_file.writestr('activities.json', json.dumps(activity_ids), zipfile.ZIP_LZMA)
 
         for activity_id in activity_ids:
+            print('Getting: ' + activity_id)
             streams = strava_client.get_activity_streams(activity_id, types=types, resolution='high')
             streams = {k: list(v.data) for k, v in streams.items()}
             data_file.writestr(str(activity_id), json.dumps(streams), zipfile.ZIP_LZMA)
+
+    return jsonify(True)
+
+@app.route('/extra_data')
+def extra_data():
+    polys = [lift_line_to_poly(v) for v in lifts.LIFTS.values()]
+    with zipfile.ZipFile('strava_data.zip') as data_file:
+        with data_file.open('activities.json') as fh:
+            ids = json.loads(fh.read().decode('ascii'))
+
+        with zipfile.ZipFile('extra_data.zip', 'w') as extra_file:
+            for act_id in ids:
+                print('Processing: ' + act_id)
+                with data_file.open(str(act_id)) as fh:
+                    streams = json.loads(fh.read().decode('ascii'))
+
+                    points = [shapely.geometry.Point(*p) for p in streams['latlng']]
+                    extra_data = {
+                        'in_lift_poly' : [any((poly.contains(point) for poly in polys)) for point in points]
+                    }
+                    extra_file.writestr(str(act_id), json.dumps(extra_data), zipfile.ZIP_LZMA)
+
     return jsonify(True)
 
 @app.route('/activities')
@@ -87,9 +116,32 @@ def activities():
                 activity_data[act_id] = json.loads(fh.read().decode('ascii'))
     return jsonify(activity_data)
 
+
+@app.route('/lift_activities')
+def lift_activities():
+    polys = [lift_line_to_poly(v) for v in lifts.LIFTS.values()]
+    with zipfile.ZipFile('strava_data.zip') as data_file:
+        with zipfile.ZipFile('extra_data.zip') as extra_file:
+            with data_file.open('activities.json') as fh:
+                ids = json.loads(fh.read().decode('ascii'))
+
+            activity_data = {}
+            for act_id in ids:
+                with data_file.open(str(act_id)) as fh:
+                    activity_data[act_id] = json.loads(fh.read().decode('ascii'))
+                with extra_file.open(str(act_id)) as fh:
+                    activity_data[act_id].update(json.loads(fh.read().decode('ascii')))
+
+    for act_id, activity in activity_data.items():
+        vals = zip_longest(activity['in_lift_poly'], activity['altitude'], activity['altitude'][1:])
+        activity['on_lift'] = [ilp and (next_alt is None or next_alt >= alt) for ilp, alt, next_alt in vals]
+
+    return jsonify(activity_data)
+
 @app.route('/lift_polys')
 def lift_polys():
-    return jsonify({k:lift_line_to_poly(v) for k, v in lifts.LIFTS.items()})
+    polys = {k:list(lift_line_to_poly(v).exterior.coords) for k, v in lifts.LIFTS.items()}
+    return jsonify(polys)
 
 def lift_line_to_poly(pts):
     # distance away from first point to lat long
@@ -101,7 +153,7 @@ def lift_line_to_poly(pts):
     dist = math.sqrt((point['lat1']-point['lat2'])**2 + (point['lon1']-point['lon2'])**2)
 
     ls = shapely.geometry.LineString(pts)
-    return list(ls.buffer(dist).exterior.coords)
+    return ls.buffer(dist, cap_style=shapely.geometry.CAP_STYLE.flat)
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT',5000))
